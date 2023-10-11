@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      canvas {
+        border: 1px solid #d3d3d3;
+        background-color: #f1f1f1;
+      }
+    </style>
+  </head>
+  <body onload="startGame()">
+    <canvas
+      id="mapa"
+      width="100"
+      height="100"
+      style="border: 1px solid #d3d3d3"
+      onclick="terreno.start()"
+    >
+      Your browser does not support the HTML canvas tag.</canvas
+    >
+    <div>
+      <input
+        type="range"
+        min="1"
+        max="50"
+        value="0"
+        class="slider"
+        id="slider_e"
+        step="1"
+      />
+    </div>
+    <div>
+      <input
+        type="range"
+        min="-1"
+        max="1"
+        value="0"
+        class="slider"
+        id="slider_x"
+        step="0.1"
+      />
+      <input
+        type="range"
+        min="-1"
+        max="1"
+        value="0"
+        class="slider"
+        id="slider_y"
+        step="0.1"
+      />
+      <input
+        type="range"
+        min="-1"
+        max="1"
+        value="0"
+        class="slider"
+        id="slider_z"
+        step="0.1"
+      />
+    </div>
+    <div>
+      <input type="button" id="play_slider_x" onclick="playpause('alfa')" />
+      <input type="button" id="play_slider_y" onclick="playpause('beta')" />
+      <input type="button" id="play_slider_z" onclick="playpause('gama')" />
+    </div>
+
+    <script>
+      var mesh = [];
+
+      function getRandomArbitrary(min, max) {
+        return Math.random() * (max - min) + min;
+      }
+
+      class Objecto {
+        constructor() {
+          this.rot_x = 0;
+          this.rot_y = 0;
+          this.rot_z = 0;
+
+          this.last_alfa = 0;
+          this.last_beta = 0;
+          this.last_gama = 0;
+
+          this.moveit = false;
+          this.moveit2 = false;
+
+          this.mesha = [];
+          this.perlin = [];
+
+          this.perlin_x = 0;
+          this.perlin_y = 0;
+
+          this.total_aX = 0;
+          this.total_aY = 0;
+          this.total_aZ = 0;
+        }
+
+        createPerlin(tamanho) {
+          this.perlin = this.perlino(5, tamanho);
+        }
+        updatePerlin() {
+          this.mesha = [];
+          let tamanho = 50;
+          let somatorio_octave = 0;
+          let octave = 0;
+          let mij = this.perlin;
+          let mmp = [];
+          for (var i = 0; i < tamanho; i++) {
+            mmp[i] = [];
+            for (var j = 0; j < tamanho; j++) {
+              octave = (10 * mij[i + this.perlin_x][j + this.perlin_y]) / 255;
+              if (i > 2 && i < tamanho - 2 && j > 2 && j < tamanho - 2)
+                somatorio_octave += octave;
+
+              mmp[i][j] = [
+                Math.floor(tamanho / 2) - i,
+                octave,
+                Math.floor(tamanho / 2) - j,
+              ];
+            }
+          }
+          let meshls = [];
+          let camadas = [];
+          let nivel_base = somatorio_octave / (tamanho * tamanho);
+
+          let dp = 0;
+          let xes = 0;
+
+          for (var i = 2; i < tamanho - 2; i++) {
+            for (var j = 2; j < tamanho - 2; j++) {
+              xes = (10 * mij[i + this.perlin_x][j + this.perlin_y]) / 255;
+              dp += Math.pow(xes - nivel_base, 2);
+            }
+          }
+
+          dp = Math.sqrt(dp / (tamanho * tamanho));
+          let rms = Math.sqrt(nivel_base * nivel_base + dp * dp);
+
+          let z_medio = 0;
+          let z_medio1 = 0;
+
+          let mmo = [];
+
+          for (let r = 0; r < tamanho - 1; r += 1) {
+            for (let l = 0; l < tamanho - 1; l += 1) {
+              z_medio = Math.max(
+                mmp[r][l][1],
+                mmp[r + 1][l][1],
+                mmp[r][l + 1][1]
+              );
+              //(mmp[r][l][1] + mmp[r + 1][l][1] + mmp[r][l + 1][1]) / 3;
+              z_medio1 = Math.max(
+                mmp[r + 1][l + 1][1],
+                mmp[r + 1][l][1],
+                mmp[r][l + 1][1]
+              );
+              // (mmp[r + 1][l + 1][1] + mmp[r + 1][l][1] + mmp[r][l + 1][1]) /
+              // 3;
+              mmo = [
+                {
+                  triangulo: [mmp[r][l], mmp[r + 1][l], mmp[r][l + 1]],
+                  cor:
+                    z_medio < rms - dp
+                      ? [0, 0, 255]
+                      : z_medio >= rms - dp || z_medio < rms + dp
+                      ? [0, 255, 0]
+                      : [255, 255, 255],
+                },
+
+                {
+                  triangulo: [mmp[r + 1][l], mmp[r + 1][l + 1], mmp[r][l + 1]],
+                  cor:
+                    z_medio1 < rms - dp
+                      ? [0, 0, 255]
+                      : z_medio1 >= rms - dp || z_medio1 < rms + dp
+                      ? [0, 255, 0]
+                      : [255, 255, 255],
+                },
+              ];
+
+              meshls.push(mmo);
+            }
+          }
+
+          meshls.forEach((element) => {
+            element.forEach((el) => {
+              this.mesha.push(el);
+            });
+          });
+        }
+
+        start() {
+          this.mesha = [];
+          this.last_alfa = 0;
+          this.last_beta = 0;
+          this.last_gama = 0;
+          this.createPerlin(100);
+          this.updatePerlin();
+        }
+
+        setAngles(alfa1, beta1, gama1) {
+          this.last_alfa = this.rot_x;
+          this.last_beta = this.rot_y;
+          this.last_gama = this.rot_z;
+          this.rot_x = alfa1;
+          this.rot_y = beta1;
+          this.rot_z = gama1;
+        }
+
+        sort() {
+          let a = lookAt_him[0] * 100;
+          let b = lookAt_him[1] * 100;
+          let c = lookAt_him[2] * 100;
+
+          this.mesha.sort(function (t1, t2) {
+            let p1 = t1.triangulo;
+            let p2 = t2.triangulo;
+            let p1xeq = (p1[0][0] + p1[1][0] + p1[2][0]) / 3;
+            let p1yeq = (p1[0][1] + p1[1][1] + p1[2][1]) / 3;
+            let p1zeq = (p1[0][2] + p1[1][2] + p1[2][2]) / 3;
+
+            let p2xeq = (p2[0][0] + p2[1][0] + p2[2][0]) / 3;
+            let p2yeq = (p2[0][1] + p2[1][1] + p2[2][1]) / 3;
+            let p2zeq = (p2[0][2] + p2[1][2] + p2[2][2]) / 3;
+
+            const d1 = Math.sqrt(
+              Math.pow(p1xeq - a, 2) +
+                Math.pow(p1yeq - b, 2) +
+                Math.pow(p1zeq - c, 2)
+            );
+            const d2 = Math.sqrt(
+              Math.pow(p2xeq - a, 2) +
+                Math.pow(p2yeq - b, 2) +
+                Math.pow(p2zeq - c, 2)
+            );
+            return d1 - d2;
+          });
+        }
+
+        plota() {
+          let alfa1 = this.total_aX - this.last_alfa;
+          let beta1 = this.total_aY - this.last_beta;
+          let gama1 = this.total_aZ - this.last_gama;
+
+          let meshCopy = [];
+
+          let triProximo = [];
+
+          for (var trian = 0; trian < this.mesha.length; trian++) {
+            let tr = this.mesha[trian].triangulo;
+
+            let pontoA = tr[0];
+            let pontoB = tr[1];
+            let pontoC = tr[2];
+            let corC = this.mesha[trian].cor;
+
+            pontoA = [
+              pontoA[0] + offset_x,
+              pontoA[1] + offset_y,
+              pontoA[2] + offset_z,
+            ];
+            pontoB = [
+              pontoB[0] + offset_x,
+              pontoB[1] + offset_y,
+              pontoB[2] + offset_z,
+            ];
+            pontoC = [
+              pontoC[0] + offset_x,
+              pontoC[1] + offset_y,
+              pontoC[2] + offset_z,
+            ];
+
+            pontoA = multiply(rot_X(alfa1), [
+              [pontoA[0]],
+              [pontoA[1]],
+              [pontoA[2]],
+            ]);
+            pontoB = multiply(rot_X(alfa1), [
+              [pontoB[0]],
+              [pontoB[1]],
+              [pontoB[2]],
+            ]);
+            pontoC = multiply(rot_X(alfa1), [
+              [pontoC[0]],
+              [pontoC[1]],
+              [pontoC[2]],
+            ]);
+            pontoA = multiply(rot_Y(beta1), [
+              [pontoA[0]],
+              [pontoA[1]],
+              [pontoA[2]],
+            ]);
+            pontoB = multiply(rot_Y(beta1), [
+              [pontoB[0]],
+              [pontoB[1]],
+              [pontoB[2]],
+            ]);
+            pontoC = multiply(rot_Y(beta1), [
+              [pontoC[0]],
+              [pontoC[1]],
+              [pontoC[2]],
+            ]);
+            pontoA = multiply(rot_Z(gama1), [
+              [pontoA[0]],
+              [pontoA[1]],
+              [pontoA[2]],
+            ]);
+            pontoB = multiply(rot_Z(gama1), [
+              [pontoB[0]],
+              [pontoB[1]],
+              [pontoB[2]],
+            ]);
+            pontoC = multiply(rot_Z(gama1), [
+              [pontoC[0]],
+              [pontoC[1]],
+              [pontoC[2]],
+            ]);
+
+            meshCopy.push({
+              cor: corC,
+              triangulo: [
+                [pontoA[0][0], pontoA[1][0], pontoA[2][0]],
+                [pontoB[0][0], pontoB[1][0], pontoB[2][0]],
+                [pontoC[0][0], pontoC[1][0], pontoC[2][0]],
+              ],
+            });
+          }
+
+          this.mesha = meshCopy;
+
+          for (var trian = 0; trian < this.mesha.length; trian++) {
+            let tr = this.mesha[trian].triangulo;
+            let corC = this.mesha[trian].cor;
+
+            let pontoA = tr[0];
+            let pontoB = tr[1];
+            let pontoC = tr[2];
+
+            let vt1 = [
+              pontoB[0] - pontoA[0],
+              pontoB[1] - pontoA[1],
+              pontoB[2] - pontoA[2],
+            ];
+            let vt2 = [
+              pontoC[0] - pontoA[0],
+              pontoC[1] - pontoA[1],
+              pontoC[2] - pontoA[2],
+            ];
+
+            let x = vt1[1] * vt2[2] - vt1[2] * vt2[1];
+            let y = vt1[2] * vt2[0] - vt1[0] * vt2[2];
+            let z = vt1[0] * vt2[1] - vt1[1] * vt2[0];
+
+            let modulo = Math.pow(x * x + y * y + z * z, 0.5);
+            let produtoVetorial = [x / modulo, y / modulo, z / modulo];
+
+            let luz = [0, 0, 1];
+
+            produtoVetorial[0] = produtoVetorial[0] = -0
+              ? 0
+              : produtoVetorial[0];
+            produtoVetorial[1] = produtoVetorial[1] = -0
+              ? 0
+              : produtoVetorial[1];
+            produtoVetorial[2] = produtoVetorial[1] = -0
+              ? 0
+              : produtoVetorial[2];
+
+            let canal_alfa =
+              produtoVetorial[0] * luz[0] +
+              produtoVetorial[1] * luz[1] +
+              produtoVetorial[2] * luz[2];
+
+            let itsbenn_looked_at =
+              produtoVetorial[0] * lookAt_him[0] +
+              produtoVetorial[1] * lookAt_him[1] +
+              produtoVetorial[2] * lookAt_him[2];
+
+            canal_alfa = canal_alfa < 0 ? 0 : canal_alfa;
+
+            if (canal_alfa > 0) {
+              drawline(
+                pontoA[0] * escala,
+                pontoA[1] * escala,
+                pontoB[0] * escala,
+                pontoB[1] * escala,
+                pontoC[0] * escala,
+                pontoC[1] * escala,
+                canal_alfa,
+                corC
+              );
+            }
+          }
+          // if (
+          //   this.last_alfa == alfa1 ||
+          //   this.last_beta == beta1 ||
+          //   this.last_gama == gama1
+          // ) {
+          //   this.setAngles(0, 0, 0);
+          // }
+
+          this.last_alfa = this.total_aX;
+          this.last_beta = this.total_aY;
+          this.last_gama = this.total_aZ;
+
+          return mesh;
+        }
+
+        perlino(num_quadrados_linha, cnv_len) {
+          function smoothstep(edge0, edge1, x) {
+            if (x < edge0) return 0;
+
+            if (x >= edge1) return 1;
+
+            //Scale/bias into [0..1] range
+            x = (x - edge0) / (edge1 - edge0);
+
+            return x * x * (3 - 2 * x);
+            //return Math.tanh(2 * x) / 2 + 0.5;
+          }
+          const w_linha = cnv_len / num_quadrados_linha;
+          const h_linha = cnv_len / num_quadrados_linha;
+
+          var matrix_base = new Array(num_quadrados_linha + 1);
+
+          for (let k = 0; k < num_quadrados_linha + 1; k++) {
+            matrix_base[k] = new Array(num_quadrados_linha + 1);
+          }
+
+          var random_arr_base = new Array(
+            2 * (num_quadrados_linha + 1) * (num_quadrados_linha + 1)
+          );
+
+          for (let oo = 0; oo < random_arr_base.length; oo++) {
+            random_arr_base[oo] = Math.random();
+          }
+
+          for (let oo = 1; oo < random_arr_base.length - 1; oo++) {
+            if (oo % 2 == 0) {
+              random_arr_base[oo] =
+                (random_arr_base[oo - 1] + random_arr_base[oo + 1]) / 2;
+            }
+          }
+
+          let oo = 0;
+          let angulo = 0;
+          for (var k = 0; k <= num_quadrados_linha; k++) {
+            for (var q = 0; q <= num_quadrados_linha; q++) {
+              angulo = random_arr_base[oo];
+              for (let offset = 0; offset < 5; offset++) {
+                if (oo - offset > 0) {
+                  angulo = angulo + random_arr_base[oo - offset];
+                } else {
+                  angulo =
+                    angulo +
+                    random_arr_base[random_arr_base.length - offset - 1];
+                }
+                if (oo + offset < random_arr_base.length) {
+                  angulo = angulo + random_arr_base[oo + offset];
+                } else {
+                  angulo = angulo + random_arr_base[offset];
+                }
+              }
+
+              //console.log(angulo, random_arr_base[oo], oo);
+              oo = oo + 1;
+              //angulo = Math.random() * 2 * 3.1415;
+              matrix_base[k][q] = [Math.cos(angulo), Math.sin(angulo)];
+            }
+          }
+
+          //console.log(matrix_base);
+
+          let canv = new Array(cnv_len);
+          let canv2 = new Array(cnv_len);
+          for (let k = 0; k < cnv_len; k++) {
+            canv[k] = new Array(cnv_len);
+            canv2[k] = new Array(cnv_len);
+          }
+
+          let m_index_x_0 = 0;
+          let m_index_y_0 = 0;
+
+          let index_x_0 = 0;
+          let index_y_0 = 0;
+
+          let index_x_1 = 0;
+          let index_y_1 = 0;
+
+          let index_x_2 = 0;
+          let index_y_2 = 0;
+
+          let index_x_3 = 0;
+          let index_y_3 = 0;
+
+          let dist1 = 0;
+          let dist2 = 0;
+          let dist3 = 0;
+          let dist4 = 0;
+
+          let grad_dist1 = 0;
+          let grad_dist2 = 0;
+          let grad_dist3 = 0;
+          let grad_dist4 = 0;
+
+          let fracx = 0;
+          let fracy = 0;
+
+          let AB = 0;
+          let CD = 0;
+
+          let value = 0;
+          let prodvet = 0;
+
+          let betta = 0;
+          let alfa = 0;
+
+          for (let i = 0; i < cnv_len; i = i + 1) {
+            for (let j = 0; j < cnv_len; j = j + 1) {
+              m_index_x_0 = Math.floor(i / w_linha);
+              m_index_y_0 = Math.floor(j / h_linha);
+
+              index_x_0 = m_index_x_0 * w_linha;
+              index_y_0 = m_index_y_0 * h_linha;
+
+              index_x_1 = (m_index_x_0 + 1) * w_linha;
+              index_y_1 = m_index_y_0 * h_linha;
+
+              index_x_2 = m_index_x_0 * w_linha;
+              index_y_2 = (m_index_y_0 + 1) * h_linha;
+
+              index_x_3 = (m_index_x_0 + 1) * w_linha;
+              index_y_3 = (m_index_y_0 + 1) * h_linha;
+
+              dist1 = [(i - index_x_0) / w_linha, (j - index_y_0) / h_linha];
+              dist2 = [(i - index_x_1) / w_linha, (j - index_y_1) / h_linha];
+              dist3 = [(i - index_x_2) / w_linha, (j - index_y_2) / h_linha];
+              dist4 = [(i - index_x_3) / w_linha, (j - index_y_3) / h_linha];
+
+              let grad = matrix_base[m_index_x_0][m_index_y_0];
+              //console.log(grad);
+              if (typeof grad == "undefined" || typeof grad[0] == "NaN") {
+                console.log(i, j, m_index_x_0, m_index_y_0);
+                console.log(matrix_base);
+              }
+
+              grad_dist1 = grad[0] * dist1[0] + grad[1] * dist1[1];
+
+              grad = matrix_base[m_index_x_0 + 1][m_index_y_0];
+              if (typeof grad == "undefined") {
+                console.log(i, j, m_index_x_0 + 1, m_index_y_0);
+                console.log(matrix_base);
+              }
+
+              grad_dist2 = grad[0] * dist2[0] + grad[1] * dist2[1];
+
+              grad = matrix_base[m_index_x_0][m_index_y_0 + 1];
+              if (typeof grad == "undefined") {
+                console.log(i, j, m_index_x_0, m_index_y_0 + 1);
+                console.log(matrix_base);
+              }
+
+              grad_dist3 = grad[0] * dist3[0] + grad[1] * dist3[1];
+
+              grad = matrix_base[m_index_x_0 + 1][m_index_y_0 + 1];
+              if (typeof grad == "undefined") {
+                console.log(i, j, m_index_x_0 + 1, m_index_y_0 + 1);
+                console.log(matrix_base);
+              }
+
+              grad_dist4 = grad[0] * dist4[0] + grad[1] * dist4[1];
+
+              fracx = (i - index_x_0) / w_linha;
+              fracy = (j - index_y_0) / h_linha;
+
+              AB = grad_dist1 + fracx * (grad_dist2 - grad_dist1);
+              CD = grad_dist3 + fracx * (grad_dist4 - grad_dist3);
+
+              value = AB + fracy * (CD - AB);
+
+              prodvet = smoothstep(-1, 1, value);
+
+              betta = 255;
+              alfa = Math.floor(betta * prodvet);
+
+              canv[i][j] = alfa;
+              canv2[i][j] = 0;
+              //ctx.fillStyle = "rgb(" + alfa + "," + alfa + "," + alfa + ")";
+              //ctx.fillRect(i, j, 1, 1);
+            }
+          }
+
+          let kernel = 0;
+
+          for (var i = 2; i < cnv_len - 2; i = i + 1) {
+            for (var j = 2; j < cnv_len - 2; j = j + 1) {
+              kernel = 0;
+              for (let it = 0; it < 2; it++) {
+                for (let kernel_x = -2; kernel_x <= 2; kernel_x++) {
+                  for (let kernel_y = -2; kernel_y <= 2; kernel_y++) {
+                    kernel += canv[i + kernel_x][j + kernel_y];
+                  }
+                }
+              }
+              canv2[i][j] = kernel / 50;
+            }
+          }
+          let c = document.getElementById("mapa");
+          let ctx = c.getContext("2d");
+          for (var i = 0; i < cnv_len; i = i + 1) {
+            for (var j = 0; j < cnv_len; j = j + 1) {
+              ctx.fillStyle =
+                "rgb(" +
+                canv2[i][j] +
+                "," +
+                canv2[i][j] +
+                "," +
+                canv2[i][j] +
+                ")";
+              ctx.fillRect(i, j, 1, 1);
+            }
+          }
+          return canv2;
+        }
+      }
+
+      let terreno = new Objecto();
+      terreno.start();
+
+      function startGame() {
+        myGameArea.start();
+      }
+
+      var myGameArea = {
+        canvas: document.createElement("canvas"),
+        start: function () {
+          this.canvas.width = 16 * 50;
+          this.canvas.height = 9 * 50;
+          this.context = this.canvas.getContext("2d");
+          this.context.translate(this.canvas.width / 2, this.canvas.height / 2);
+
+          document.body.insertBefore(this.canvas, document.body.childNodes[0]);
+
+          this.interval = setInterval(updateGameArea, 90);
+        },
+        clear: function () {
+          this.context.setTransform(1, 0, 0, 1, 0, 0);
+
+          this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+          this.context.fillStyle = "rgb(" + 0 + "," + 0 + "," + 0 + ")";
+          this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+          this.context.translate(this.canvas.width / 2, this.canvas.height / 2);
+        },
+      };
+
+      let oldX = 0;
+      let oldY = 0;
+      myGameArea.canvas.addEventListener("mousemove", function (event) {
+        const rect = myGameArea.canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        // console.log(`Mouse position: (${x}, ${y})`);
+        if (Math.abs(x - oldX) > 0.15) {
+          if (x > oldX) {
+            beta = beta + 0.1;
+            anti_beta -= 0.1;
+          } else {
+            beta = beta - 0.1;
+            anti_beta += 0.1;
+          }
+        }
+        if (Math.abs(y - oldY) > 0.15) {
+          if (y > oldY) {
+            alfa = alfa + 0.1;
+            anti_alfa -= 0.1;
+          } else {
+            alfa = alfa - 0.1;
+            anti_alfa += 0.1;
+          }
+        }
+        sliderx.value = alfa;
+        slidery.value = beta;
+        oldY = y;
+        oldX = x;
+      });
+      var sliderescala = document.getElementById("slider_e");
+      var sliderx = document.getElementById("slider_x");
+      var slidery = document.getElementById("slider_y");
+      var sliderz = document.getElementById("slider_z");
+
+      function playpause(eng) {
+        if (eng == "alfa") {
+          toplay_alfa = !toplay_alfa;
+        }
+        if (eng == "beta") {
+          toplay_beta = !toplay_beta;
+        }
+        if (eng == "gama") {
+          toplay_gama = !toplay_gama;
+        }
+      }
+
+      sliderx.oninput = function () {
+        if (this.value - last_alfa > 0) {
+          alfa = alfa + 0.1;
+        } else {
+          alfa = alfa - 0.1;
+        }
+        last_alfa = this.value;
+        terreno.moveit = true;
+      };
+      slidery.oninput = function () {
+        if (this.value - last_beta > 0) {
+          beta = beta + 0.1;
+        } else {
+          beta = beta - 0.1;
+        }
+        last_beta = this.value;
+        terreno.moveit = true;
+      };
+      sliderz.oninput = function () {
+        if (this.value - last_gama > 0) {
+          gama = gama + 0.1;
+        } else {
+          gama = gama - 0.1;
+        }
+        last_gama = this.value;
+        terreno.moveit = true;
+      };
+
+      sliderescala.oninput = function () {
+        escala = this.value;
+      };
+
+      alfa = 0; //eixo X
+      beta = 0; //Eixo y
+      gama = 0; //Eixo Z
+
+      offset_x = 0;
+      offset_y = 0;
+      offset_z = 0;
+
+      last_alfa = 0; //eixo X
+      last_beta = 0; //Eixo y
+      last_gama = 0; //Eixo Z
+
+      last_offset_x = 0;
+      last_offset_y = 0;
+      last_offset_z = 0;
+
+      anti_alfa = 0; //eixo X
+      anti_beta = 0; //Eixo y
+      anti_gama = 0; //Eixo Z
+
+      let escala = 1;
+      let lookAt_him = [0, 0, 1];
+
+      toplay_alfa = false;
+      toplay_beta = false;
+      toplay_gama = false;
+
+      document.addEventListener("keydown", function (e) {
+        console.log(e.keyCode);
+        let tecla = e.keyCode;
+        if (tecla == 87) {
+          //w
+          offset_z = offset_z + 1;
+          escala += 1;
+        }
+        if (tecla == 83) {
+          //s
+          offset_z = offset_z - 1;
+          escala -= 1;
+        }
+        if (tecla == 68) {
+          //d
+          offset_x = offset_x - 1;
+        }
+        if (tecla == 65) {
+          //a
+          offset_x = offset_x + 1;
+        }
+        if (tecla == 32) {
+          //espaço
+          offset_y = offset_y + 1;
+        }
+        if (tecla == 67) {
+          //c
+          offset_y = offset_y - 1;
+        }
+
+        if (tecla == 37) {
+          terreno.perlin_x -= 1;
+          terreno.perlin_x = terreno.perlin_x < 0 ? 0 : terreno.perlin_x;
+          terreno.moveit2 = true;
+        } //left
+        if (tecla == 38) {
+          terreno.perlin_y += 1;
+          terreno.perlin_y = terreno.perlin_y >= 100 ? 99 : terreno.perlin_y;
+          terreno.moveit2 = true;
+        } //up
+        if (tecla == 39) {
+          terreno.perlin_x += 1;
+          terreno.perlin_x = terreno.perlin_x >= 100 ? 99 : terreno.perlin_x;
+          terreno.moveit2 = true;
+        } //dir
+        if (tecla == 40) {
+          terreno.perlin_y -= 1;
+          terreno.perlin_y = terreno.perlin_y < 0 ? 0 : terreno.perlin_y;
+          terreno.moveit2 = true;
+        } //bot
+      });
+
+      function updateGameArea() {
+        myGameArea.clear();
+
+        if (toplay_alfa) {
+          alfa = parseFloat(alfa) + 0.01;
+          sliderx.value = alfa;
+          terreno.moveit = true;
+        }
+        if (toplay_beta) {
+          beta = parseFloat(beta) + 0.01;
+          slidery.value = beta;
+          terreno.moveit = true;
+        }
+        if (toplay_gama) {
+          gama = parseFloat(gama) + 0.01;
+          sliderz.value = gama;
+          terreno.perlin_x += 1;
+          terreno.moveit = true;
+        }
+        if (alfa >= 7) {
+          alfa = 0;
+        }
+        if (beta >= 7) {
+          beta = 0;
+        }
+        if (gama >= 7) {
+          gama = 0;
+        }
+
+        if (terreno.moveit) {
+          //terreno.setAngles(alfa, beta, gama);
+
+          terreno.total_aX += alfa;
+          terreno.total_aY += beta;
+          terreno.total_aZ += gama;
+          terreno.moveit = false;
+        }
+
+        terreno.sort();
+        terreno.plota();
+
+        if (terreno.moveit2) {
+          // if (Math.random() > 0.5) {
+          //   terreno.perlin_x += 1;
+          // } else {
+          //   terreno.perlin_x -= 1;
+          // }
+          // if (Math.random() > 0.5) {
+          //   terreno.perlin_y += 1;
+          // } else {
+          //   terreno.perlin_y -= 1;
+          // }
+          // if (terreno.perlin_x < 0 || terreno.perlin_x >= 50) {
+          //   terreno.perlin_x = Math.floor(Math.random() * 50);
+          // }
+          // if (terreno.perlin_y < 0 || terreno.perlin_y >= 50) {
+          //   terreno.perlin_y = Math.floor(Math.random() * 50);
+          // }
+
+          terreno.last_alfa = 0;
+          terreno.last_beta = 0;
+          terreno.last_gama = 0;
+          terreno.updatePerlin();
+          terreno.moveit2 = false;
+        }
+
+        alfa = 0; //eixo X
+        beta = 0; //Eixo y
+        gama = 0; //Eixo Z
+
+        offset_x = 0;
+        offset_y = 0;
+        offset_z = 0;
+      }
+      function multiply(m1, m2) {
+        var result = [];
+        for (var i = 0; i < m1.length; i++) {
+          result[i] = [];
+          for (var j = 0; j < m2[0].length; j++) {
+            var sum = 0;
+            for (var k = 0; k < m1[0].length; k++) {
+              sum += m1[i][k] * m2[k][j];
+            }
+            result[i][j] = sum;
+          }
+        }
+        return result;
+      }
+      function transpose(matrix) {
+        let cols = matrix.length;
+        let rows = matrix[0].length || 1;
+
+        let grid = Array(cols);
+        for (let j = 0; j < cols; j++) {
+          grid[j] = Array(rows);
+        }
+        for (let i = 0; i < rows; i++) {
+          for (let j = 0; j < cols; j++) {
+            if (rows == 1) {
+              grid[j][i] = matrix[i];
+            } else {
+              grid[j][i] = matrix[i][j];
+            }
+          }
+        }
+        return grid;
+      }
+
+      function rot_X(alfa) {
+        return [
+          [1, 0, 0],
+          [0, Math.cos(alfa * 0.5), Math.sin(alfa * 0.5)],
+          [0, -Math.sin(alfa * 0.5), Math.cos(alfa * 0.5)],
+        ];
+      }
+      function rot_Y(alfa) {
+        return [
+          [Math.cos(alfa), 0, Math.sin(alfa)],
+          [0, 1, 0],
+          [-Math.sin(alfa), 0, Math.cos(alfa)],
+        ];
+      }
+      function rot_Z(alfa) {
+        return [
+          [Math.cos(alfa), Math.sin(alfa), 0],
+          [-Math.sin(alfa), Math.cos(alfa), 0],
+          [0, 0, 1],
+        ];
+      }
+
+      function drawline(x1, y1, x2, y2, x3, y3, a, corC) {
+        myGameArea.context.fillStyle =
+          "rgb(" + a * corC[0] + "," + a * corC[1] + "," + a * corC[2] + ")";
+        myGameArea.context.strokeStyle =
+          "rgb(" + a * corC[0] + "," + a * corC[1] + "," + a * corC[2] + ")";
+        myGameArea.context.beginPath();
+        myGameArea.context.lineWidth = 1;
+        myGameArea.context.moveTo(x1, -y1);
+        myGameArea.context.lineTo(x2, -y2);
+        myGameArea.context.lineTo(x3, -y3);
+        myGameArea.context.lineTo(x1, -y1);
+        myGameArea.context.stroke();
+
+        myGameArea.context.fill();
+        return null;
+      }
+
+      function cubos(x, y, z) {
+        return [
+          [
+            [x, y, z],
+            [x, y + 1, z],
+            [x + 1, y + 1, z],
+          ],
+          [
+            [x, y, z],
+            [x + 1, y + 1, z],
+            [x + 1, y, z],
+          ],
+
+          [
+            [x + 1, y, z],
+            [x + 1, y + 1, z],
+            [x + 1, y + 1, z + 1],
+          ],
+          [
+            [x + 1, y, z],
+            [x + 1, y + 1, z + 1],
+            [x + 1, y, z + 1],
+          ],
+
+          [
+            [x + 1, y, z + 1],
+            [x + 1, y + 1, z + 1],
+            [x, y + 1, z + 1],
+          ],
+          [
+            [x + 1, y, z + 1],
+            [x, y + 1, z + 1],
+            [x, y, z + 1],
+          ],
+
+          [
+            [x, y, z + 1],
+            [x, y + 1, z + 1],
+            [x, y + 1, z],
+          ],
+          [
+            [x, y, z + 1],
+            [x, y + 1, z],
+            [x, y, z],
+          ],
+
+          [
+            [x, y + 1, z],
+            [x, y + 1, z + 1],
+            [x + 1, y + 1, z + 1],
+          ],
+          [
+            [x, y + 1, z],
+            [x + 1, y + 1, z + 1],
+            [x + 1, y + 1, z],
+          ],
+
+          [
+            [x + 1, y, z + 1],
+            [x, y, z + 1],
+            [x, y, z],
+          ],
+          [
+            [x + 1, y, z + 1],
+            [x, y, z],
+            [x + 1, y, z],
+          ],
+        ];
+      }
+    </script>
+    <p>The red square is actually being drawn 50 times per second.</p>
+  </body>
+</html>
